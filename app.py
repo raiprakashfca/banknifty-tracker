@@ -5,8 +5,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 import json
 import pandas as pd
 import datetime as dt
-import matplotlib.pyplot as plt
-import seaborn as sns
 import statsmodels.api as sm
 import io
 
@@ -90,8 +88,8 @@ if st.button("📈 Fetch BANKNIFTY Index Price"):
     except Exception as e:
         st.error(f"❌ Failed to fetch BANKNIFTY price: {e}")
 
-# --- Step 4: Historical OHLC + Correlation Matrix ---
-st.subheader("4️⃣ Historical OHLC + Regression + Correlation")
+# --- Step 4: Historical OHLC + Regression Analysis ---
+st.subheader("4️⃣ Historical OHLC + Regression Impact Report")
 
 with st.expander("📅 Select Date Range and Interval"):
     start_date = st.date_input("Start Date", value=dt.date.today() - dt.timedelta(days=30))
@@ -111,7 +109,10 @@ if st.button("📊 Run Analysis"):
         instruments = kite.instruments("NSE")
 
         for symbol in symbols:
-            token = next((i["instrument_token"] for i in instruments if i["tradingsymbol"] == symbol), None)
+            if symbol == "BANKNIFTY":
+                token = 260105  # Hardcoded token for BANKNIFTY index
+            else:
+                token = next((i["instrument_token"] for i in instruments if i["tradingsymbol"] == symbol), None)
             if not token:
                 st.warning(f"⚠️ Instrument token not found for {symbol}")
                 continue
@@ -123,30 +124,25 @@ if st.button("📊 Run Analysis"):
         df_combined = pd.DataFrame(ohlc_data)
         returns = df_combined.pct_change().dropna()
 
-        st.subheader("🔍 Correlation Matrix")
-        fig, ax = plt.subplots(figsize=(10, 6))
-        sns.heatmap(returns.corr(), annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
-        st.pyplot(fig)
-
-        st.subheader("📈 BANKNIFTY vs Components Regression")
+        st.subheader("📈 Component Impact on BANKNIFTY")
         X = returns[symbols[1:]]
         y = returns["BANKNIFTY"]
         X = sm.add_constant(X)
         model = sm.OLS(y, X).fit()
         summary_df = pd.DataFrame({
-            "Symbol": X.columns[1:],
-            "Coefficient": model.params[1:],
+            "Stock": X.columns[1:],
+            "Impact (Beta)": model.params[1:],
             "P-value": model.pvalues[1:]
-        }).sort_values("Coefficient", ascending=False)
+        }).sort_values("Impact (Beta)", ascending=False)
 
-        st.dataframe(summary_df)
+        st.dataframe(summary_df, use_container_width=True)
 
         # --- Export to Excel ---
         excel_buffer = io.BytesIO()
         with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
             df_combined.to_excel(writer, sheet_name='Prices')
             returns.to_excel(writer, sheet_name='Returns')
-            summary_df.to_excel(writer, sheet_name='RegressionSummary', index=False)
+            summary_df.to_excel(writer, sheet_name='ImpactReport', index=False)
         st.download_button("📥 Download Excel Report", data=excel_buffer.getvalue(), file_name="banknifty_analysis.xlsx")
 
     except Exception as e:
