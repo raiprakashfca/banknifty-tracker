@@ -1,27 +1,8 @@
-# Python cache
-__pycache__/
-*.py[cod]
-*.pyo
-
-# Environment and dependency folders
-.env/
-.venv/
-env/
-venv/
-
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints/
-
-# IDEs/editors
-.idea/
-.vscode/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Streamlit secrets (if used locally)
 secrets.toml
-
-# Logs
-*.log
+get_and_save_token.py
+get_token.py
+access_token.txt
+*.pyc
+__pycache__/
+.env
+*.zip
