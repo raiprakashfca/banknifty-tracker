@@ -2,3 +2,5 @@ streamlit
 pandas
 kiteconnect
 statsmodels
+gspread
+oauth2client
