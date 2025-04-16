@@ -68,25 +68,29 @@ if "access_token" in st.session_state and st.button("💾 Save to Google Sheet")
     except Exception as e:
         st.error(f"❌ Failed to write to Google Sheet: {e}")
 
-# --- Step 3: Use Saved Token to Fetch BANKNIFTY Price ---
-st.subheader("3️⃣ Test Saved Token - BANKNIFTY Price")
+# --- Step 3: Live Market Prices ---
+st.subheader("📡 Live Market Prices")
 
-if st.button("📈 Fetch BANKNIFTY Index Price"):
-    try:
-        tokens = sheet.row_values(1)
-        if len(tokens) < 3:
-            st.warning("⚠️ Sheet does not contain all 3 values (API Key, Secret, Access Token)")
-        else:
-            saved_api_key = tokens[0]
-            saved_access_token = tokens[2]
+try:
+    tokens = sheet.row_values(1)
+    saved_api_key = tokens[0]
+    saved_access_token = tokens[2]
+    kite = KiteConnect(api_key=saved_api_key)
+    kite.set_access_token(saved_access_token)
 
-            kite = KiteConnect(api_key=saved_api_key)
-            kite.set_access_token(saved_access_token)
-            quote = kite.quote(["NSE:NIFTY BANK"])
-            last_price = quote["NSE:NIFTY BANK"]["last_price"]
-            st.success(f"💰 BANKNIFTY Index Spot Price: {last_price}")
-    except Exception as e:
-        st.error(f"❌ Failed to fetch BANKNIFTY price: {e}")
+    live_symbols = ["NSE:NIFTY BANK", "NSE:HDFCBANK", "NSE:ICICIBANK", "NSE:SBIN", "NSE:AXISBANK", "NSE:KOTAKBANK", "NSE:BANKBARODA", "NSE:PNB"]
+    live_data = kite.quote(live_symbols)
+
+    live_table = []
+    for s in live_symbols:
+        name = s.split(":")[1]
+        price = live_data[s]["last_price"]
+        change = live_data[s]["net_change"] if "net_change" in live_data[s] else None
+        live_table.append({"Symbol": name, "Last Price": price, "Change": change})
+
+    st.dataframe(pd.DataFrame(live_table))
+except Exception as e:
+    st.error(f"❌ Failed to fetch live prices: {e}")
 
 # --- Step 4: Historical OHLC + Regression Analysis ---
 st.subheader("4️⃣ Historical OHLC + Regression Impact Report")
@@ -98,12 +102,6 @@ with st.expander("📅 Select Date Range and Interval"):
 
 if st.button("📊 Run Analysis"):
     try:
-        tokens = sheet.row_values(1)
-        saved_api_key = tokens[0]
-        saved_access_token = tokens[2]
-        kite = KiteConnect(api_key=saved_api_key)
-        kite.set_access_token(saved_access_token)
-
         symbols = ["BANKNIFTY", "HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", "KOTAKBANK", "BANKBARODA", "PNB"]
         ohlc_data = {}
         instruments = kite.instruments("NSE")
@@ -118,6 +116,7 @@ if st.button("📊 Run Analysis"):
                 continue
             data = kite.historical_data(token, start_date, end_date, interval)
             df = pd.DataFrame(data)
+            df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
             df.set_index("date", inplace=True)
             ohlc_data[symbol] = df["close"]
 
@@ -136,6 +135,15 @@ if st.button("📊 Run Analysis"):
         }).sort_values("Impact (Beta)", ascending=False)
 
         st.dataframe(summary_df, use_container_width=True)
+
+        with st.expander("📘 What Do These Numbers Mean?"):
+            st.markdown("""
+            - **Impact (Beta)**: Shows how much BANKNIFTY is expected to move when the stock moves.
+              - Example: If HDFCBANK has Beta = 0.45, a 1% rise in HDFCBANK contributes ~0.45% to BANKNIFTY.
+            - **P-value**: Indicates confidence in that relationship.
+              - P < 0.05 = statistically significant (reliable)
+              - P > 0.1 = could be random noise
+            """)
 
         # --- Export to Excel ---
         excel_buffer = io.BytesIO()
