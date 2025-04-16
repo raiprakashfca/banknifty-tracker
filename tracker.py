@@ -1,7 +1,8 @@
 import streamlit as st
 from kiteconnect import KiteConnect
+import datetime as dt
 
-# ✅ Load credentials from Streamlit Secrets
+# ✅ Load API creds from Streamlit Cloud secrets
 api_key = st.secrets["api_key"]
 access_token = st.secrets["access_token"]
 
@@ -9,20 +10,20 @@ access_token = st.secrets["access_token"]
 kite = KiteConnect(api_key=api_key)
 kite.set_access_token(access_token)
 
-# ✅ Get BANKNIFTY instrument token
-def get_banknifty_token():
-    instruments = kite.instruments()
-    for instrument in instruments:
-        if instrument["tradingsymbol"] == "BANKNIFTY" and instrument["exchange"] == "NSE":
-            return instrument["instrument_token"]
-    raise ValueError("BANKNIFTY instrument not found in instruments list")
+# ✅ Function to fetch BANKNIFTY index price (no token needed)
+def get_banknifty_index_price():
+    try:
+        quote = kite.quote(["NSE:NIFTY BANK"])
+        return quote["NSE:NIFTY BANK"]["last_price"]
+    except Exception as e:
+        st.error(f"Failed to fetch BANKNIFTY index price: {e}")
+        return None
 
-# ✅ Main function to simulate return data (placeholder for now)
+# ✅ Dummy data return function
 def get_all_returns(from_date, to_date):
-    token = get_banknifty_token()
-    # Simulate return data (replace with actual Kite historical data logic)
-    return [{"date": from_date, "return": 0.0}, {"date": to_date, "return": 0.01}]
+    price = get_banknifty_index_price()
+    return [{"date": from_date, "price": price}, {"date": to_date, "price": price + 100}]  # Dummy diff
 
-# ✅ Dummy regression analysis placeholder
+# ✅ Dummy regression output
 def analyze_contribution(df, as_text=False):
-    return "📈 Dummy regression result.\nAdd your statsmodels code here to analyze."
+    return "📊 Dummy regression: BANKNIFTY moved +100 pts between dates (fake data)."
