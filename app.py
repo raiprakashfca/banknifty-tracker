@@ -18,7 +18,7 @@ try:
     ]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(google_creds, scope)
     client = gspread.authorize(creds)
-    sheet = client.open("ZerodhaTokenStore").sheet1
+    sheet = client.open("ZerodhaTokenStore").worksheet("Sheet1")
     st.success("✅ Connected to Google Sheet successfully.")
 except Exception as e:
     st.error(f"❌ Failed to connect to Google Sheets: {e}")
@@ -51,11 +51,7 @@ if api_key and api_secret:
             # --- Save to Google Sheet ---
             if st.button("💾 Save to Google Sheet"):
                 try:
-                    sheet.values_update(
-                        range="Sheet1!A1:C1",
-                        params={"valueInputOption": "RAW"},
-                        body={"values": [[api_key, api_secret, access_token]]}
-                    )
+                    sheet.update("A1", [[api_key, api_secret, access_token]])
                     st.success("✅ Token saved to Google Sheet (A1:C1)")
                 except Exception as e:
                     st.error(f"❌ Failed to write to Google Sheet: {e}")
