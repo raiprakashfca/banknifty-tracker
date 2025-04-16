@@ -27,8 +27,8 @@ except Exception as e:
 # --- Step 2: API Key Input and Login URL ---
 st.subheader("2️⃣ Enter API Credentials")
 
-api_key = st.text_input("🔑 API Key")
-api_secret = st.text_input("🔒 API Secret", type="password")
+api_key = st.text_input("🔑 API Key", value=st.session_state.get("api_key", ""))
+api_secret = st.text_input("🔒 API Secret", type="password", value=st.session_state.get("api_secret", ""))
 
 if api_key and api_secret:
     try:
@@ -41,24 +41,28 @@ if api_key and api_secret:
 
     request_token = st.text_input("📥 Paste request_token from redirected URL")
 
-    if request_token:
+    if request_token and st.button("🔓 Generate Access Token"):
         try:
             session = kite.generate_session(request_token, api_secret=api_secret)
-            access_token = session["access_token"]
+            st.session_state["access_token"] = session["access_token"]
+            st.session_state["api_key"] = api_key
+            st.session_state["api_secret"] = api_secret
             st.success("✅ Access token generated successfully!")
-            st.code(access_token)
-
-            # --- Save to Google Sheet ---
-            if st.button("💾 Save to Google Sheet"):
-                try:
-                    sheet.update("A1", [[api_key, api_secret, access_token]])
-                    st.success("✅ Token saved to Google Sheet (A1:C1)")
-                except Exception as e:
-                    st.error(f"❌ Failed to write to Google Sheet: {e}")
+            st.code(st.session_state["access_token"])
         except Exception as e:
             st.error(f"❌ Token generation failed: {e}")
-else:
-    st.info("ℹ️ Enter your Zerodha API Key and Secret to begin.")
+
+# --- Save to Google Sheet Button ---
+if "access_token" in st.session_state and st.button("💾 Save to Google Sheet"):
+    try:
+        sheet.update("A1", [[
+            st.session_state["api_key"],
+            st.session_state["api_secret"],
+            st.session_state["access_token"]
+        ]])
+        st.success("✅ Token saved to Google Sheet (A1:C1)")
+    except Exception as e:
+        st.error(f"❌ Failed to write to Google Sheet: {e}")
 
 # --- Step 3: Use Saved Token to Fetch BANKNIFTY Price ---
 st.subheader("3️⃣ Test Saved Token - BANKNIFTY Price")
