@@ -5,9 +5,9 @@ from oauth2client.service_account import ServiceAccountCredentials
 import json
 
 st.set_page_config(layout="wide")
-st.title("🔐 Zerodha Token Generator + Sheet Saver")
+st.title("🔐 Zerodha Token Manager + BANKNIFTY Tracker")
 
-# --- Connect to Google Sheet ---
+# --- Step 1: Connect to Google Sheet ---
 st.subheader("1️⃣ Connect to Google Sheet")
 
 try:
@@ -24,20 +24,23 @@ except Exception as e:
     st.error(f"❌ Failed to connect to Google Sheets: {e}")
     st.stop()
 
-# --- API Inputs ---
+# --- Step 2: API Key Input and Login URL ---
 st.subheader("2️⃣ Enter API Credentials")
 
-api_key = st.text_input("🔑 API Key", key="api_key_input")
-api_secret = st.text_input("🔒 API Secret", type="password", key="api_secret_input")
+api_key = st.text_input("🔑 API Key")
+api_secret = st.text_input("🔒 API Secret", type="password")
 
-# Generate login URL
 if api_key and api_secret:
-    kite = KiteConnect(api_key=api_key)
-    login_url = kite.login_url()
-    st.markdown(f"🔗 [Login to Zerodha → get `request_token`]({login_url})")
-    request_token = st.text_input("📥 Paste request_token from URL")
+    try:
+        kite = KiteConnect(api_key=api_key)
+        login_url = kite.login_url()
+        st.markdown(f"🔗 [Login to Zerodha → get `request_token`]({login_url})")
+    except Exception as e:
+        st.error(f"❌ Failed to create login URL: {e}")
+        st.stop()
 
-    # --- Generate access token ---
+    request_token = st.text_input("📥 Paste request_token from redirected URL")
+
     if request_token:
         try:
             session = kite.generate_session(request_token, api_secret=api_secret)
@@ -49,11 +52,11 @@ if api_key and api_secret:
             if st.button("💾 Save to Google Sheet"):
                 try:
                     sheet.values_update(
-                        "A1:C1",
+                        range="Sheet1!A1:C1",
                         params={"valueInputOption": "RAW"},
                         body={"values": [[api_key, api_secret, access_token]]}
                     )
-                    st.success("✅ Credentials saved to Google Sheet (A1:C1)")
+                    st.success("✅ Token saved to Google Sheet (A1:C1)")
                 except Exception as e:
                     st.error(f"❌ Failed to write to Google Sheet: {e}")
         except Exception as e:
@@ -61,22 +64,22 @@ if api_key and api_secret:
 else:
     st.info("ℹ️ Enter your Zerodha API Key and Secret to begin.")
 
-# --- Use saved token to get BANKNIFTY price ---
-st.subheader("3️⃣ Test Token from Sheet")
+# --- Step 3: Use Saved Token to Fetch BANKNIFTY Price ---
+st.subheader("3️⃣ Test Saved Token - BANKNIFTY Price")
 
 if st.button("📈 Fetch BANKNIFTY Index Price"):
     try:
         tokens = sheet.row_values(1)
         if len(tokens) < 3:
-            st.warning("⚠️ Sheet does not have full credentials in A1:C1")
+            st.warning("⚠️ Sheet does not contain all 3 values (API Key, Secret, Access Token)")
         else:
-            saved_key = tokens[0]
-            saved_token = tokens[2]
+            saved_api_key = tokens[0]
+            saved_access_token = tokens[2]
 
-            kite = KiteConnect(api_key=saved_key)
-            kite.set_access_token(saved_token)
+            kite = KiteConnect(api_key=saved_api_key)
+            kite.set_access_token(saved_access_token)
             quote = kite.quote(["NSE:NIFTY BANK"])
-            price = quote["NSE:NIFTY BANK"]["last_price"]
-            st.success(f"✅ BANKNIFTY Index Spot: {price}")
+            last_price = quote["NSE:NIFTY BANK"]["last_price"]
+            st.success(f"💰 BANKNIFTY Index Spot Price: {last_price}")
     except Exception as e:
-        st.error(f"❌ Failed to fetch BANKNIFTY: {e}")
+        st.error(f"❌ Failed to fetch BANKNIFTY price: {e}")
