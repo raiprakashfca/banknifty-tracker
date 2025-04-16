@@ -7,15 +7,17 @@ import json
 st.set_page_config(layout="wide")
 st.title("🔐 Zerodha Token Generator + Google Sheet Saver")
 
-# --- SESSION STATE ---
+# --- Session State ---
 if "kite" not in st.session_state:
     st.session_state.kite = None
 if "api_key" not in st.session_state:
     st.session_state.api_key = ""
 if "api_secret" not in st.session_state:
     st.session_state.api_secret = ""
-if "token_saved" not in st.session_state:
-    st.session_state.token_saved = False
+if "access_token" not in st.session_state:
+    st.session_state.access_token = None
+if "login_url" not in st.session_state:
+    st.session_state.login_url = None
 
 # --- Google Sheet Connection ---
 try:
@@ -27,41 +29,46 @@ try:
     sheet_ok = True
     st.success("✅ Connected to Google Sheet: ZerodhaTokenStore")
 except Exception as e:
+    sheet = None
     sheet_ok = False
     st.error(f"❌ Could not connect to Google Sheets: {e}")
 
-# --- API Credentials Input ---
+# --- Step 1: API Input ---
 st.subheader("Step 1: Enter Zerodha API Key and Secret")
 st.session_state.api_key = st.text_input("API Key", value=st.session_state.api_key)
 st.session_state.api_secret = st.text_input("API Secret", value=st.session_state.api_secret, type="password")
 
-if st.session_state.api_key and st.session_state.api_secret:
-    if st.button("🔗 Generate Login URL"):
-        st.session_state.kite = KiteConnect(api_key=st.session_state.api_key)
-        st.session_state.login_url = st.session_state.kite.login_url()
-        st.success("✅ Login URL generated. Use it below.")
-        st.markdown(f"[Click here to log in to Zerodha and get your `request_token`]({st.session_state.login_url})")
+# --- Step 2: Generate Login URL ---
+if st.button("🔗 Generate Zerodha Login URL"):
+    st.session_state.kite = KiteConnect(api_key=st.session_state.api_key)
+    st.session_state.login_url = st.session_state.kite.login_url()
 
-# --- Step 2: Paste Request Token ---
-if "kite" in st.session_state and st.session_state.kite:
-    st.subheader("Step 2: Paste `request_token` from redirect URL")
-    request_token = st.text_input("Paste request_token from URL")
+if st.session_state.login_url:
+    st.markdown(f"[Click here to login to Zerodha and get `request_token`]({st.session_state.login_url})")
 
-    if request_token:
+# --- Step 3: Paste Request Token ---
+request_token = st.text_input("📥 Paste request_token from URL")
+
+if request_token and st.session_state.kite:
+    if st.session_state.access_token is None:
         try:
             session = st.session_state.kite.generate_session(request_token, st.session_state.api_secret)
-            access_token = session["access_token"]
+            st.session_state.access_token = session["access_token"]
             st.success("✅ Access token generated successfully!")
-            st.code(access_token)
-
-            if st.button("💾 Save to Google Sheet"):
-                if sheet_ok:
-                    sheet.update("A1", st.session_state.api_key)
-                    sheet.update("B1", st.session_state.api_secret)
-                    sheet.update("C1", access_token)
-                    st.session_state.token_saved = True
-                    st.success("✅ Token saved to Google Sheet successfully!")
-                else:
-                    st.error("❌ Cannot save to sheet. Connection failed.")
+            st.code(st.session_state.access_token)
         except Exception as e:
             st.error(f"❌ Token generation failed: {e}")
+
+# --- Step 4: Save to Google Sheet ---
+if st.session_state.access_token:
+    if st.button("💾 Save token to Google Sheet"):
+        if sheet_ok:
+            try:
+                sheet.update("A1", st.session_state.api_key)
+                sheet.update("B1", st.session_state.api_secret)
+                sheet.update("C1", st.session_state.access_token)
+                st.success("✅ Token saved to Google Sheet successfully!")
+            except Exception as e:
+                st.error(f"❌ Failed to update sheet: {e}")
+        else:
+            st.error("❌ Google Sheet connection not available.")
