@@ -3,3 +3,8 @@ kiteconnect
 gspread
 oauth2client
 pandas
+matplotlib
+seaborn
+statsmodels
+openpyxl
+xlsxwriter
