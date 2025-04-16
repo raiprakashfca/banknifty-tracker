@@ -7,12 +7,17 @@ import json
 st.set_page_config(layout="wide")
 st.title("🔐 Zerodha Token Generator + Google Sheet Saver")
 
-# --- SECTION 1: Google Sheet Setup ---
-st.subheader("Step 1: Connect to Google Sheet")
+# --- SESSION STATE ---
+if "kite" not in st.session_state:
+    st.session_state.kite = None
+if "api_key" not in st.session_state:
+    st.session_state.api_key = ""
+if "api_secret" not in st.session_state:
+    st.session_state.api_secret = ""
+if "token_saved" not in st.session_state:
+    st.session_state.token_saved = False
 
-sheet_ok = False
-sheet = None
-
+# --- Google Sheet Connection ---
 try:
     google_creds = json.loads(st.secrets["GOOGLE_SERVICE_ACCOUNT"])
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -20,44 +25,43 @@ try:
     client = gspread.authorize(creds)
     sheet = client.open("ZerodhaTokenStore").sheet1
     sheet_ok = True
-    st.success("✅ Connected to Google Sheet: `ZerodhaTokenStore`")
+    st.success("✅ Connected to Google Sheet: ZerodhaTokenStore")
 except Exception as e:
+    sheet_ok = False
     st.error(f"❌ Could not connect to Google Sheets: {e}")
 
-# --- SECTION 2: Zerodha Token Generation ---
-st.subheader("Step 2: Generate Zerodha Access Token")
+# --- API Credentials Input ---
+st.subheader("Step 1: Enter Zerodha API Key and Secret")
+st.session_state.api_key = st.text_input("API Key", value=st.session_state.api_key)
+st.session_state.api_secret = st.text_input("API Secret", value=st.session_state.api_secret, type="password")
 
-api_key = st.text_input("🔑 Enter API Key")
-api_secret = st.text_input("🔒 Enter API Secret", type="password")
+if st.session_state.api_key and st.session_state.api_secret:
+    if st.button("🔗 Generate Login URL"):
+        st.session_state.kite = KiteConnect(api_key=st.session_state.api_key)
+        st.session_state.login_url = st.session_state.kite.login_url()
+        st.success("✅ Login URL generated. Use it below.")
+        st.markdown(f"[Click here to log in to Zerodha and get your `request_token`]({st.session_state.login_url})")
 
-if api_key and api_secret:
-    kite = KiteConnect(api_key=api_key)
-    login_url = kite.login_url()
-    st.markdown(f"🔗 [Click here to login to Zerodha and get request_token]({login_url})")
-
-    request_token = st.text_input("📥 Paste request_token from URL")
+# --- Step 2: Paste Request Token ---
+if "kite" in st.session_state and st.session_state.kite:
+    st.subheader("Step 2: Paste `request_token` from redirect URL")
+    request_token = st.text_input("Paste request_token from URL")
 
     if request_token:
         try:
-            session = kite.generate_session(request_token, api_secret=api_secret)
+            session = st.session_state.kite.generate_session(request_token, st.session_state.api_secret)
             access_token = session["access_token"]
-            st.success("✅ Access token generated!")
+            st.success("✅ Access token generated successfully!")
             st.code(access_token)
 
-            # Save to Google Sheet
             if st.button("💾 Save to Google Sheet"):
-                if not sheet_ok:
-                    st.warning("⚠️ Google Sheet not connected.")
+                if sheet_ok:
+                    sheet.update("A1", st.session_state.api_key)
+                    sheet.update("B1", st.session_state.api_secret)
+                    sheet.update("C1", access_token)
+                    st.session_state.token_saved = True
+                    st.success("✅ Token saved to Google Sheet successfully!")
                 else:
-                    try:
-                        sheet.update("A1", api_key)
-                        sheet.update("B1", api_secret)
-                        sheet.update("C1", access_token)
-                        st.success("✅ Token saved to Google Sheet successfully!")
-                    except Exception as e:
-                        st.error(f"❌ Failed to save to sheet: {e}")
-
+                    st.error("❌ Cannot save to sheet. Connection failed.")
         except Exception as e:
             st.error(f"❌ Token generation failed: {e}")
-else:
-    st.info("ℹ️ Please enter your API Key and Secret to begin.")
