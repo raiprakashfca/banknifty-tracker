@@ -3,6 +3,12 @@ from kiteconnect import KiteConnect
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
+import pandas as pd
+import datetime as dt
+import matplotlib.pyplot as plt
+import seaborn as sns
+import statsmodels.api as sm
+import io
 
 st.set_page_config(layout="wide")
 st.title("🔐 Zerodha Token Manager + BANKNIFTY Tracker")
@@ -83,3 +89,65 @@ if st.button("📈 Fetch BANKNIFTY Index Price"):
             st.success(f"💰 BANKNIFTY Index Spot Price: {last_price}")
     except Exception as e:
         st.error(f"❌ Failed to fetch BANKNIFTY price: {e}")
+
+# --- Step 4: Historical OHLC + Correlation Matrix ---
+st.subheader("4️⃣ Historical OHLC + Regression + Correlation")
+
+with st.expander("📅 Select Date Range and Interval"):
+    start_date = st.date_input("Start Date", value=dt.date.today() - dt.timedelta(days=30))
+    end_date = st.date_input("End Date", value=dt.date.today())
+    interval = st.selectbox("Interval", ["day", "5minute", "15minute", "30minute", "60minute"])
+
+if st.button("📊 Run Analysis"):
+    try:
+        tokens = sheet.row_values(1)
+        saved_api_key = tokens[0]
+        saved_access_token = tokens[2]
+        kite = KiteConnect(api_key=saved_api_key)
+        kite.set_access_token(saved_access_token)
+
+        symbols = ["BANKNIFTY", "HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", "KOTAKBANK", "BANKBARODA", "PNB"]
+        ohlc_data = {}
+        instruments = kite.instruments("NSE")
+
+        for symbol in symbols:
+            token = next((i["instrument_token"] for i in instruments if i["tradingsymbol"] == symbol), None)
+            if not token:
+                st.warning(f"⚠️ Instrument token not found for {symbol}")
+                continue
+            data = kite.historical_data(token, start_date, end_date, interval)
+            df = pd.DataFrame(data)
+            df.set_index("date", inplace=True)
+            ohlc_data[symbol] = df["close"]
+
+        df_combined = pd.DataFrame(ohlc_data)
+        returns = df_combined.pct_change().dropna()
+
+        st.subheader("🔍 Correlation Matrix")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.heatmap(returns.corr(), annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
+        st.pyplot(fig)
+
+        st.subheader("📈 BANKNIFTY vs Components Regression")
+        X = returns[symbols[1:]]
+        y = returns["BANKNIFTY"]
+        X = sm.add_constant(X)
+        model = sm.OLS(y, X).fit()
+        summary_df = pd.DataFrame({
+            "Symbol": X.columns[1:],
+            "Coefficient": model.params[1:],
+            "P-value": model.pvalues[1:]
+        }).sort_values("Coefficient", ascending=False)
+
+        st.dataframe(summary_df)
+
+        # --- Export to Excel ---
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+            df_combined.to_excel(writer, sheet_name='Prices')
+            returns.to_excel(writer, sheet_name='Returns')
+            summary_df.to_excel(writer, sheet_name='RegressionSummary', index=False)
+        st.download_button("📥 Download Excel Report", data=excel_buffer.getvalue(), file_name="banknifty_analysis.xlsx")
+
+    except Exception as e:
+        st.error(f"❌ Analysis failed: {e}")
