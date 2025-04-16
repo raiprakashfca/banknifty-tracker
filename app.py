@@ -39,21 +39,27 @@ if st.button("🔗 Generate Zerodha Login URL"):
 if st.session_state.login_url:
     st.markdown(f"🔗 [Click here to login and get request_token]({st.session_state.login_url})")
 
-# --- Paste request_token ---
-st.subheader("Step 2: Paste request_token from redirect URL")
-request_token = st.text_input("📥 Paste request_token")
+# --- Step 2: Paste request_token ---
+st.subheader("Step 2: Paste `request_token` and generate Access Token")
+st.session_state.request_token = st.text_input("📥 Paste request_token")
 
-# --- Generate Access Token Button ---
-if request_token and st.button("⚡ Generate Access Token"):
-    try:
-        session = st.session_state.kite.generate_session(request_token, st.session_state.api_secret)
-        st.session_state.access_token = session["access_token"]
-        st.success("✅ Access token generated successfully!")
-        st.code(st.session_state.access_token)
-    except Exception as e:
-        st.error(f"❌ Token generation failed: {e}")
+# ✅ Always show this button now
+if st.button("⚡ Generate Access Token"):
+    if st.session_state.kite and st.session_state.request_token:
+        try:
+            session = st.session_state.kite.generate_session(
+                st.session_state.request_token,
+                st.session_state.api_secret
+            )
+            st.session_state.access_token = session["access_token"]
+            st.success("✅ Access token generated successfully!")
+            st.code(st.session_state.access_token)
+        except Exception as e:
+            st.error(f"❌ Token generation failed: {e}")
+    else:
+        st.warning("⚠️ Please ensure both login link and request_token are available.")
 
-# --- Save to Google Sheet ---
+# --- Step 3: Save to Google Sheet ---
 if st.session_state.access_token:
     st.subheader("Step 3: Save to Google Sheet")
     if st.button("💾 Save token to Google Sheet"):
