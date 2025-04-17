@@ -7,6 +7,7 @@ import pandas as pd
 import datetime as dt
 import statsmodels.api as sm
 import io
+import time
 
 st.set_page_config(layout="wide")
 st.title("🔐 Zerodha Token Manager + BANKNIFTY Tracker")
@@ -69,7 +70,13 @@ if "access_token" in st.session_state and st.button("💾 Save to Google Sheet")
         st.error(f"❌ Failed to write to Google Sheet: {e}")
 
 # --- Step 3: Live Market Prices ---
-st.subheader("📡 Live Market Prices")
+st.subheader("📡 Live Market Prices (Auto-Refresh every 1 min)")
+refresh_interval = 60  # seconds
+last_refresh = st.session_state.get("last_refresh", 0)
+now = time.time()
+if now - last_refresh > refresh_interval:
+    st.session_state["last_refresh"] = now
+    st.experimental_rerun()
 
 try:
     tokens = sheet.row_values(1)
@@ -84,10 +91,16 @@ try:
     live_table = []
     for s in live_symbols:
         name = s.split(":")[1]
-        price = live_data[s]["last_price"]
-        change = live_data[s]["change"] if "change" in live_data[s] else 0.0
-        change_color = "green" if change >= 0 else "red"
-        live_table.append({"Symbol": name, "Last Price": price, "Change": f"{change:+.2f}"})
+        price = round(live_data[s]["last_price"], 2)
+        prev_close = round(live_data[s].get("ohlc", {}).get("close", 0.0), 2)
+        change = round(price - prev_close, 2)
+        pct_change = round((change / prev_close * 100), 2) if prev_close else 0.0
+        live_table.append({
+            "Symbol": name,
+            "Last Price": f"{price:.2f}",
+            "Change": f"{change:+.2f}",
+            "% Change": f"{pct_change:+.2f}%"
+        })
 
     df_live = pd.DataFrame(live_table)
     def highlight_change(val):
@@ -97,70 +110,6 @@ try:
             return 'color: red;'
         return ''
 
-    st.dataframe(df_live.style.applymap(highlight_change, subset=["Change"]))
+    st.dataframe(df_live.style.applymap(highlight_change, subset=["Change", "% Change"]))
 except Exception as e:
     st.error(f"❌ Failed to fetch live prices: {e}")
-
-# --- Step 4: Historical OHLC + Regression Analysis ---
-st.subheader("4️⃣ Historical OHLC + Regression Impact Report")
-
-with st.expander("📅 Select Date Range and Interval"):
-    start_date = st.date_input("Start Date", value=dt.date.today() - dt.timedelta(days=30))
-    end_date = st.date_input("End Date", value=dt.date.today())
-    interval = st.selectbox("Interval", ["day", "5minute", "15minute", "30minute", "60minute"])
-
-if st.button("📊 Run Analysis"):
-    try:
-        symbols = ["BANKNIFTY", "HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", "KOTAKBANK", "BANKBARODA", "PNB"]
-        ohlc_data = {}
-        instruments = kite.instruments("NSE")
-
-        for symbol in symbols:
-            if symbol == "BANKNIFTY":
-                token = 260105  # Hardcoded token for BANKNIFTY index
-            else:
-                token = next((i["instrument_token"] for i in instruments if i["tradingsymbol"] == symbol), None)
-            if not token:
-                st.warning(f"⚠️ Instrument token not found for {symbol}")
-                continue
-            data = kite.historical_data(token, start_date, end_date, interval)
-            df = pd.DataFrame(data)
-            df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
-            df.set_index("date", inplace=True)
-            ohlc_data[symbol] = df["close"]
-
-        df_combined = pd.DataFrame(ohlc_data)
-        returns = df_combined.pct_change().dropna()
-
-        st.subheader("📈 Component Impact on BANKNIFTY")
-        X = returns[symbols[1:]]
-        y = returns["BANKNIFTY"]
-        X = sm.add_constant(X)
-        model = sm.OLS(y, X).fit()
-        summary_df = pd.DataFrame({
-            "Stock": X.columns[1:],
-            "Impact (Beta)": model.params[1:],
-            "P-value": model.pvalues[1:]
-        }).sort_values("Impact (Beta)", ascending=False)
-
-        st.dataframe(summary_df, use_container_width=True)
-
-        with st.expander("📘 What Do These Numbers Mean?"):
-            st.markdown("""
-            - **Impact (Beta)**: Shows how much BANKNIFTY is expected to move when the stock moves.
-              - Example: If HDFCBANK has Beta = 0.45, a 1% rise in HDFCBANK contributes ~0.45% to BANKNIFTY.
-            - **P-value**: Indicates confidence in that relationship.
-              - P < 0.05 = statistically significant (reliable)
-              - P > 0.1 = could be random noise
-            """)
-
-        # --- Export to Excel ---
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-            df_combined.to_excel(writer, sheet_name='Prices')
-            returns.to_excel(writer, sheet_name='Returns')
-            summary_df.to_excel(writer, sheet_name='ImpactReport', index=False)
-        st.download_button("📥 Download Excel Report", data=excel_buffer.getvalue(), file_name="banknifty_analysis.xlsx")
-
-    except Exception as e:
-        st.error(f"❌ Analysis failed: {e}")
