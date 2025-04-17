@@ -85,10 +85,19 @@ try:
     for s in live_symbols:
         name = s.split(":")[1]
         price = live_data[s]["last_price"]
-        change = live_data[s]["net_change"] if "net_change" in live_data[s] else None
-        live_table.append({"Symbol": name, "Last Price": price, "Change": change})
+        change = live_data[s]["change"] if "change" in live_data[s] else 0.0
+        change_color = "green" if change >= 0 else "red"
+        live_table.append({"Symbol": name, "Last Price": price, "Change": f"{change:+.2f}"})
 
-    st.dataframe(pd.DataFrame(live_table))
+    df_live = pd.DataFrame(live_table)
+    def highlight_change(val):
+        if isinstance(val, str) and val.startswith('+'):
+            return 'color: green;'
+        elif isinstance(val, str) and val.startswith('-'):
+            return 'color: red;'
+        return ''
+
+    st.dataframe(df_live.style.applymap(highlight_change, subset=["Change"]))
 except Exception as e:
     st.error(f"❌ Failed to fetch live prices: {e}")
 
