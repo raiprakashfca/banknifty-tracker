@@ -70,46 +70,41 @@ if "access_token" in st.session_state and st.button("💾 Save to Google Sheet")
         st.error(f"❌ Failed to write to Google Sheet: {e}")
 
 # --- Step 3: Live Market Prices ---
-st.subheader("📡 Live Market Prices (Auto-Refresh every 1 min)")
-refresh_interval = 60  # seconds
-last_refresh = st.session_state.get("last_refresh", 0)
-now = time.time()
-if now - last_refresh > refresh_interval:
-    st.session_state["last_refresh"] = now
-    st.experimental_rerun()
+st.subheader("📡 Live Market Prices (Click button to refresh)")
 
-try:
-    tokens = sheet.row_values(1)
-    saved_api_key = tokens[0]
-    saved_access_token = tokens[2]
-    kite = KiteConnect(api_key=saved_api_key)
-    kite.set_access_token(saved_access_token)
+if st.button("🔄 Refresh Live Prices"):
+    try:
+        tokens = sheet.row_values(1)
+        saved_api_key = tokens[0]
+        saved_access_token = tokens[2]
+        kite = KiteConnect(api_key=saved_api_key)
+        kite.set_access_token(saved_access_token)
 
-    live_symbols = ["NSE:NIFTY BANK", "NSE:HDFCBANK", "NSE:ICICIBANK", "NSE:SBIN", "NSE:AXISBANK", "NSE:KOTAKBANK", "NSE:BANKBARODA", "NSE:PNB"]
-    live_data = kite.quote(live_symbols)
+        live_symbols = ["NSE:NIFTY BANK", "NSE:HDFCBANK", "NSE:ICICIBANK", "NSE:SBIN", "NSE:AXISBANK", "NSE:KOTAKBANK", "NSE:BANKBARODA", "NSE:PNB"]
+        live_data = kite.quote(live_symbols)
 
-    live_table = []
-    for s in live_symbols:
-        name = s.split(":")[1]
-        price = round(live_data[s]["last_price"], 2)
-        prev_close = round(live_data[s].get("ohlc", {}).get("close", 0.0), 2)
-        change = round(price - prev_close, 2)
-        pct_change = round((change / prev_close * 100), 2) if prev_close else 0.0
-        live_table.append({
-            "Symbol": name,
-            "Last Price": f"{price:.2f}",
-            "Change": f"{change:+.2f}",
-            "% Change": f"{pct_change:+.2f}%"
-        })
+        live_table = []
+        for s in live_symbols:
+            name = s.split(":")[1]
+            price = round(live_data[s]["last_price"], 2)
+            prev_close = round(live_data[s].get("ohlc", {}).get("close", 0.0), 2)
+            change = round(price - prev_close, 2)
+            pct_change = round((change / prev_close * 100), 2) if prev_close else 0.0
+            live_table.append({
+                "Symbol": name,
+                "Last Price": f"{price:.2f}",
+                "Change": f"{change:+.2f}",
+                "% Change": f"{pct_change:+.2f}%"
+            })
 
-    df_live = pd.DataFrame(live_table)
-    def highlight_change(val):
-        if isinstance(val, str) and val.startswith('+'):
-            return 'color: green;'
-        elif isinstance(val, str) and val.startswith('-'):
-            return 'color: red;'
-        return ''
+        df_live = pd.DataFrame(live_table)
+        def highlight_change(val):
+            if isinstance(val, str) and val.startswith('+'):
+                return 'color: green;'
+            elif isinstance(val, str) and val.startswith('-'):
+                return 'color: red;'
+            return ''
 
-    st.dataframe(df_live.style.applymap(highlight_change, subset=["Change", "% Change"]))
-except Exception as e:
-    st.error(f"❌ Failed to fetch live prices: {e}")
+        st.dataframe(df_live.style.applymap(highlight_change, subset=["Change", "% Change"]))
+    except Exception as e:
+        st.error(f"❌ Failed to fetch live prices: {e}")
