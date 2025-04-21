@@ -1,55 +1,75 @@
-import gspread
-from kiteconnect import KiteConnect
-from oauth2client.service_account import ServiceAccountCredentials
 import streamlit as st
-import datetime as dt
+from kiteconnect import KiteConnect
 import pandas as pd
+import datetime as dt
+import statsmodels.api as sm
 
-# --- Authenticate with Google Sheets ---
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-google_creds = st.secrets["GOOGLE_SERVICE_ACCOUNT"]
-creds = ServiceAccountCredentials.from_json_keyfile_dict(google_creds, scope)
-client = gspread.authorize(creds)
+# Load credentials from Streamlit secrets
+try:
+    api_key = st.secrets["api_key"]
+    access_token = st.secrets["access_token"]
+except KeyError as e:
+    st.error(f"Missing secret: {e}")
+    st.stop()
 
-# --- Load API keys from Google Sheet ---
-sheet = client.open("ZerodhaTokenStore").sheet1
-tokens = sheet.row_values(1)  # Expecting: [api_key, api_secret, access_token]
-
-api_key = tokens[0]
-api_secret = tokens[1]
-access_token = tokens[2]
-
-# --- Setup KiteConnect ---
+# Authenticate with Kite API
 kite = KiteConnect(api_key=api_key)
 kite.set_access_token(access_token)
 
-# --- Function to fetch BANKNIFTY Index Price ---
-def get_banknifty_price():
-    quote = kite.quote(["NSE:NIFTY BANK"])
-    return quote["NSE:NIFTY BANK"]["last_price"]
+# Define BANKNIFTY and components
+symbols = {
+    "BANKNIFTY": "NSE:NIFTY BANK",
+    "HDFCBANK": "NSE:HDFCBANK",
+    "ICICIBANK": "NSE:ICICIBANK",
+    "SBIN": "NSE:SBIN",
+    "KOTAKBANK": "NSE:KOTAKBANK",
+    "AXISBANK": "NSE:AXISBANK",
+    "BANKBARODA": "NSE:BANKBARODA",
+    "PNB": "NSE:PNB",
+}
 
-# --- Function to fetch historical OHLC (can be reused for any symbol) ---
-def get_ohlc(symbol, interval, from_date, to_date):
+# Fetch instrument token
+def get_token(symbol):
     try:
-        instrument_list = kite.instruments("NSE")
-        token = next((item["instrument_token"] for item in instrument_list if item["tradingsymbol"] == symbol and item["exchange"] == "NSE"), None)
-        if not token:
-            raise Exception(f"Token not found for {symbol}")
-        data = kite.historical_data(token, from_date, to_date, interval)
-        return pd.DataFrame(data)
+        instrument = symbols[symbol]
+        return kite.ltp([instrument])[instrument]["instrument_token"]
     except Exception as e:
-        st.error(f"Error fetching OHLC for {symbol}: {e}")
-        return pd.DataFrame()
+        st.error(f"Failed to fetch instrument token for {symbol}: {e}")
+        st.stop()
 
-# --- Dummy Analysis Example ---
+# Fetch historical data
+def get_data(symbol, from_date, to_date, interval="day"):
+    token = get_token(symbol)
+    data = kite.historical_data(token, from_date, to_date, interval)
+    df = pd.DataFrame(data)
+    df["date"] = pd.to_datetime(df["date"])
+    return df
+
+# Calculate returns
+def calculate_returns(df):
+    df = df.sort_values("date")
+    df["return"] = df["close"].pct_change()
+    return df[["date", "return"]]
+
+# Combine returns from all symbols
 def get_all_returns(from_date, to_date):
-    price = get_banknifty_price()
-    return [
-        {"date": from_date, "price": price},
-        {"date": to_date, "price": price + 100}
-    ]
+    returns_df = pd.DataFrame()
+    for symbol in symbols:
+        df = get_data(symbol, from_date, to_date)
+        df = calculate_returns(df)
+        df.rename(columns={"return": symbol}, inplace=True)
+        if returns_df.empty:
+            returns_df = df
+        else:
+            returns_df = pd.merge(returns_df, df[["date", symbol]], on="date", how="outer")
+    return returns_df.dropna()
 
-def analyze_contribution(df, as_text=False):
-    if not df:
-        return "⚠️ No data to analyze."
-    return f"📊 BANKNIFTY moved from {df[0]['price']} to {df[1]['price']}."
+# Analyze contribution using regression
+def analyze_contribution(returns_df, as_text=False):
+    X = returns_df[[s for s in symbols if s != "BANKNIFTY"]]
+    y = returns_df["BANKNIFTY"]
+    X = sm.add_constant(X)
+    model = sm.OLS(y, X).fit()
+    if as_text:
+        return model.summary().as_text()
+    return model
