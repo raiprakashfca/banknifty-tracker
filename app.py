@@ -41,18 +41,21 @@ try:
                 st.text_area("Regression Output", summary, height=400)
 
                 st.subheader("🔍 Contribution (%) of each stock to BANKNIFTY movement")
-                X = df[[col for col in df.columns if col != "date" and col != "BANKNIFTY"]]
-                y = df["BANKNIFTY"]
-                X = sm.add_constant(X)
-                model = sm.OLS(y, X).fit()
-                coefs = model.params.drop("const")
-                contrib_pct = 100 * coefs / coefs.sum()
-                result_df = pd.DataFrame({
-                    "Stock": coefs.index,
-                    "Beta Coefficient": coefs.values,
-                    "Contribution (%)": contrib_pct.values
-                })
-                st.dataframe(result_df.sort_values("Contribution (%)", ascending=False).reset_index(drop=True))
+                if df.empty or "BANKNIFTY" not in df.columns:
+                    st.error("❌ Dataframe is empty or missing BANKNIFTY column.")
+                else:
+                    X = df[[col for col in df.columns if col != "date" and col != "BANKNIFTY"]]
+                    y = df["BANKNIFTY"]
+                    X = sm.add_constant(X)
+                    model = sm.OLS(y, X).fit()
+                    coefs = model.params.drop("const")
+                    contrib_pct = 100 * coefs / coefs.sum()
+                    result_df = pd.DataFrame({
+                        "Stock": coefs.index,
+                        "Beta Coefficient": coefs.values,
+                        "Contribution (%)": contrib_pct.values
+                    })
+                    st.dataframe(result_df.sort_values("Contribution (%)", ascending=False).reset_index(drop=True))
 
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
