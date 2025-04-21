@@ -6,9 +6,31 @@ from tracker import get_all_returns, analyze_contribution
 from token_utils import load_credentials_from_gsheet
 import statsmodels.api as sm
 import threading
+import json
 
 st.set_page_config(page_title="BANKNIFTY Tracker", layout="wide")
 st.title("📊 BANKNIFTY Component Impact Tracker")
+
+# Validate secrets upfront
+required_keys = ["gcp_service_account", "spreadsheet_url"]
+missing_keys = [key for key in required_keys if key not in st.secrets]
+
+if missing_keys:
+    st.error(f"🚨 Missing required secrets: {', '.join(missing_keys)}")
+    st.stop()
+
+# Test mode toggle
+if st.sidebar.checkbox("🔍 Debug: Show loaded Google Sheet credentials"):
+    st.sidebar.info("Credentials loaded from Google Sheets")
+    try:
+        test_api_key, test_api_secret, test_access_token, _ = load_credentials_from_gsheet(st.secrets)
+        st.sidebar.write({
+            "api_key": test_api_key,
+            "api_secret": test_api_secret,
+            "access_token": test_access_token
+        })
+    except Exception as e:
+        st.sidebar.error(f"Failed to load credentials: {e}")
 
 # Load credentials from Google Sheets via shared utility
 st.header("🔐 Loading Zerodha credentials from Google Sheets")
