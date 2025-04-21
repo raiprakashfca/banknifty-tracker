@@ -1,38 +1,20 @@
 import streamlit as st
 from kiteconnect import KiteConnect
 import datetime as dt
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-import json
 from tracker import get_all_returns, analyze_contribution
+from token_utils import load_credentials_from_gsheet
 
 st.set_page_config(page_title="BANKNIFTY Tracker", layout="wide")
 st.title("📊 BANKNIFTY Component Impact Tracker")
 
-# Section 1: Load credentials from Google Sheets (ZerodhaTokenStore)
+# Load credentials from Google Sheets via shared utility
 st.header("🔐 Loading Zerodha credentials from Google Sheets")
 
 try:
-    credentials = json.loads(st.secrets["gcp_service_account"])
-    spreadsheet_url = st.secrets["spreadsheet_url"]
+    api_key, api_secret, access_token, valid_token = load_credentials_from_gsheet(st.secrets)
 
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials, scope)
-    client = gspread.authorize(creds)
-    sheet = client.open_by_url(spreadsheet_url).worksheet("ZerodhaTokenStore")
-
-    # Read values
-    records = sheet.get_all_records()
-    creds_map = {row['Key']: row['Value'] for row in records if 'Key' in row and 'Value' in row}
-
-    api_key = creds_map.get("api_key")
-    api_secret = creds_map.get("api_secret")
-    access_token = creds_map.get("access_token")
-
-    if not api_key or not api_secret or not access_token:
-        st.error("❌ Missing credentials in the sheet. Please make sure api_key, api_secret, and access_token are present.")
-    else:
-        st.success("✅ Zerodha credentials loaded successfully from Google Sheet")
+    if valid_token:
+        st.success("✅ Access token is valid. Loaded from Google Sheet.")
 
         # Run analysis section
         st.header("📈 BANKNIFTY Contribution Analysis")
@@ -52,9 +34,26 @@ try:
                 st.text_area("Regression Output", summary, height=400)
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
+    else:
+        st.warning("⚠️ Access token from sheet is invalid. Please provide a new one.")
 
 except Exception as e:
     st.error(f"🚨 Failed to load credentials from Google Sheets: {e}")
+    valid_token = False
 
-# Rename canvas to match file
-# canvas rename: app.py
+if not valid_token:
+    st.header("🔑 Enter New Zerodha Access Token")
+    api_key = st.text_input("API Key", value=api_key or "")
+    api_secret = st.text_input("API Secret", type="password", value=api_secret or "")
+    request_token = st.text_input("Paste request_token")
+
+    if st.button("Generate New Access Token") and api_key and api_secret and request_token:
+        try:
+            kite = KiteConnect(api_key=api_key)
+            session = kite.generate_session(request_token, api_secret=api_secret)
+            access_token = session["access_token"]
+            st.success("✅ New access token generated!")
+            st.code(access_token)
+            st.markdown("**Please update this token back into the Google Sheet manually.**")
+        except Exception as e:
+            st.error(f"❌ Failed to generate token: {e}")
