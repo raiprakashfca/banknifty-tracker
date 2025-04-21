@@ -4,18 +4,6 @@ import pandas as pd
 import datetime as dt
 import statsmodels.api as sm
 
-# Load credentials from Streamlit secrets
-try:
-    api_key = st.secrets["api_key"]
-    access_token = st.secrets["access_token"]
-except KeyError as e:
-    st.error(f"Missing secret: {e}")
-    st.stop()
-
-# Authenticate with Kite API
-kite = KiteConnect(api_key=api_key)
-kite.set_access_token(access_token)
-
 # Define BANKNIFTY and components
 symbols = {
     "BANKNIFTY": "NSE:NIFTY BANK",
@@ -29,7 +17,7 @@ symbols = {
 }
 
 # Fetch instrument token
-def get_token(symbol):
+def get_token(kite, symbol):
     try:
         instrument = symbols[symbol]
         return kite.ltp([instrument])[instrument]["instrument_token"]
@@ -38,8 +26,8 @@ def get_token(symbol):
         st.stop()
 
 # Fetch historical data
-def get_data(symbol, from_date, to_date, interval="day"):
-    token = get_token(symbol)
+def get_data(kite, symbol, from_date, to_date, interval="day"):
+    token = get_token(kite, symbol)
     data = kite.historical_data(token, from_date, to_date, interval)
     df = pd.DataFrame(data)
     df["date"] = pd.to_datetime(df["date"])
@@ -52,10 +40,13 @@ def calculate_returns(df):
     return df[["date", "return"]]
 
 # Combine returns from all symbols
-def get_all_returns(from_date, to_date):
+def get_all_returns(api_key, access_token, from_date, to_date):
+    kite = KiteConnect(api_key=api_key)
+    kite.set_access_token(access_token)
+    
     returns_df = pd.DataFrame()
     for symbol in symbols:
-        df = get_data(symbol, from_date, to_date)
+        df = get_data(kite, symbol, from_date, to_date)
         df = calculate_returns(df)
         df.rename(columns={"return": symbol}, inplace=True)
         if returns_df.empty:
