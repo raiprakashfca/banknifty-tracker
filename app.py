@@ -1,10 +1,10 @@
 import streamlit as st
 from kiteconnect import KiteConnect
 import datetime as dt
-from tracker import get_all_returns, analyze_contribution
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
+from tracker import get_all_returns, analyze_contribution
 
 st.set_page_config(page_title="BANKNIFTY Tracker", layout="wide")
 st.title("📊 BANKNIFTY Component Impact Tracker")
@@ -46,12 +46,7 @@ try:
         if st.button("Run Analysis"):
             st.info("🔄 Fetching data and analyzing...")
             try:
-                # Inject into secrets so tracker.py can use them
-                st.secrets["api_key"] = api_key
-                st.secrets["api_secret"] = api_secret
-                st.secrets["access_token"] = access_token
-
-                df = get_all_returns(from_date, to_date)
+                df = get_all_returns(api_key, access_token, from_date, to_date)
                 summary = analyze_contribution(df, as_text=True)
                 st.success("✅ Analysis complete.")
                 st.text_area("Regression Output", summary, height=400)
@@ -60,3 +55,6 @@ try:
 
 except Exception as e:
     st.error(f"🚨 Failed to load credentials from Google Sheets: {e}")
+
+# Rename canvas to match file
+# canvas rename: app.py
