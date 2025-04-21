@@ -23,7 +23,7 @@ if missing_keys:
 if st.sidebar.checkbox("🔍 Debug: Show loaded Google Sheet credentials"):
     st.sidebar.info("Credentials loaded from Google Sheets")
     try:
-        test_api_key, test_api_secret, test_access_token, _ = load_credentials_from_gsheet(st.secrets)
+        test_api_key, test_api_secret, test_access_token, _ = load_credentials_from_gsheet(st.secrets, sheet_name="Sheet1")
         st.sidebar.write({
             "api_key": test_api_key,
             "api_secret": test_api_secret,
@@ -40,7 +40,7 @@ start_prices = {}
 coefs = None
 
 try:
-    api_key, api_secret, access_token, valid_token = load_credentials_from_gsheet(st.secrets)
+    api_key, api_secret, access_token, valid_token = load_credentials_from_gsheet(st.secrets, sheet_name="Sheet1")
 
     if valid_token:
         st.success("✅ Access token is valid. Loaded from Google Sheet.")
