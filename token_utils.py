@@ -1,42 +1,30 @@
 import gspread
-import json
-from kiteconnect import KiteConnect
 from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 
 
-def load_credentials_from_gsheet(secrets, worksheet_name="ZerodhaTokenStore"):
-    """
-    Load API credentials from a Google Sheet.
-    Returns api_key, api_secret, access_token, valid_token
-    """
+def load_credentials_from_gsheet(secrets, sheet_name="Sheet1"):
     try:
-        credentials = json.loads(secrets["gcp_service_account"])
-        spreadsheet_url = secrets["spreadsheet_url"]
-
-        scope = [
-            "https://spreadsheets.google.com/feeds",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials, scope)
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        google_creds = secrets["gcp_service_account"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(google_creds, scope)
         client = gspread.authorize(creds)
-        sheet = client.open_by_url(spreadsheet_url).worksheet(worksheet_name)
 
-        records = sheet.get_all_records()
-        creds_map = {row['Key']: row['Value'] for row in records if 'Key' in row and 'Value' in row}
+        sheet_url = secrets["spreadsheet_url"]
+        sheet = client.open_by_url(sheet_url).worksheet(sheet_name)
 
-        api_key = creds_map.get("api_key")
-        api_secret = creds_map.get("api_secret")
-        access_token = creds_map.get("access_token")
+        data = sheet.get_all_records()
+        if not data:
+            raise ValueError("Sheet is empty")
 
-        valid_token = False
-        if api_key and api_secret and access_token:
-            kite = KiteConnect(api_key=api_key)
-            kite.set_access_token(access_token)
-            try:
-                kite.profile()  # validate token
-                valid_token = True
-            except Exception:
-                valid_token = False
+        row = data[0]  # Use the first row
+        api_key = row.get("api_key")
+        api_secret = row.get("api_secret")
+        access_token = row.get("access_token")
+        last_updated = row.get("last_updated")
+
+        # Optional validation logic
+        valid_token = bool(access_token and len(access_token) > 20)
 
         return api_key, api_secret, access_token, valid_token
 
