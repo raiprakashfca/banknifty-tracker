@@ -14,15 +14,19 @@ def load_credentials_from_gsheet(secrets, sheet_name="Sheet1"):
         sheet_url = secrets["spreadsheet_url"]
         sheet = client.open_by_url(sheet_url).worksheet(sheet_name)
 
-        data = sheet.get_all_records()
-        if not data:
+        values = sheet.get_all_values()
+        if len(values) < 1:
             raise ValueError("Sheet is empty")
 
-        row = data[0]  # Use the first row
-        api_key = row.get("api_key")
-        api_secret = row.get("api_secret")
-        access_token = row.get("access_token")
-        last_updated = row.get("last_updated")
+        # Read directly from row 1 (index 0)
+        row = values[0]
+        if len(row) < 4:
+            raise ValueError("Expected at least 4 columns in the first row")
+
+        api_key = row[0].strip()
+        api_secret = row[1].strip()
+        access_token = row[2].strip()
+        last_updated = row[3].strip()
 
         # Optional validation logic
         valid_token = bool(access_token and len(access_token) > 20)
